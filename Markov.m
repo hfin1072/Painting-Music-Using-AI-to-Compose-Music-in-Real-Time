@@ -100,9 +100,6 @@ end
 harmonySOM = trainHarmonySOM(combinedHarmonyFeatures);
 disp('Step 4: SOM training complete.');
 
-plotInputComponentPlanes(harmonySOM);
-plotChordPropertyHeatMap(harmonySOM);
-
 %% Step 5: Generate Harmony
 % Define the SOM dimensions based on what is used during training
  if isa(harmonySOM, 'network') && isprop(harmonySOM, 'IW') && ...

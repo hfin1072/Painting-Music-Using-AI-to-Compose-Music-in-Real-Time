@@ -1,187 +1,173 @@
 function combineMelodyHarmony(melodySequence, harmonySequence, outputFilename, melodyTempo, harmonyTempo)
-%   melodySequence - Matrix format with [startTime, note, duration, velocity]
-%   harmonySequence - Matrix format with [note1, note2, note3, ..., duration, velocity, startTime]
-%   outputFilename - Output MIDI filename (string)
-%   melodyTempo - Tempo for melody in BPM (default 120)
-%   harmonyTempo - Tempo for harmony in BPM (default 120)
+%   melodySequence [startTime, note, duration, velocity]
+%   harmonySequence [note1, note2, ..., duration, velocity, startTime]
 
-    if nargin < 4
+% Default tempos
+    if nargin<4 || isempty(melodyTempo)
         melodyTempo = 120;
     end
-    if nargin < 5
+    if nargin<5 || isempty(harmonyTempo)
         harmonyTempo = melodyTempo;
     end
-    finalTempo = round((melodyTempo + harmonyTempo) / 2);
+    finalTempo = round((melodyTempo + harmonyTempo)/2);
+
+    % Initilise
     nmat = [];
     melodyTotalDuration = 0;
     harmonyTotalDuration = 0;
 
+    % Melody duration
     if ~isempty(melodySequence)
-        for i = 1:size(melodySequence, 1)
-            endTime = melodySequence(i, 1) + melodySequence(i, 3);
-            if endTime > melodyTotalDuration
-                melodyTotalDuration = endTime;
-            end
-        end
+        melEnds = melodySequence(:,1) + melodySequence(:,3);
+        melodyTotalDuration = max(melEnds);
     end
 
+    % Harmony duration
     if ~isempty(harmonySequence)
-        for i = 1:size(harmonySequence, 1)
-            harmonyTotalDuration = harmonyTotalDuration + harmonySequence(i, 4);
-        end
+        durCol = size(harmonySequence,2) - 2;
+        harmonyTotalDuration = sum(harmonySequence(:,durCol));
     end
 
+    % Overall duration
     maxDuration = max(melodyTotalDuration, harmonyTotalDuration);
 
+    % Build melody
     if ~isempty(melodySequence)
         melodyNmat = [];
         currentTime = 0;
         while currentTime < maxDuration
-            for i = 1:size(melodySequence, 1)
-                startTimeSec = melodySequence(i, 1) + currentTime;
-                pitch = melodySequence(i, 2);
-                durationSec = melodySequence(i, 3);
-                velocity = melodySequence(i, 4);
+            for i = 1:size(melodySequence,1)
+                st = melodySequence(i,1) + currentTime;
+                d  = melodySequence(i,3);
 
-                if startTimeSec >= maxDuration
-                    continue;
+                if st >= maxDuration
+                    continue; 
                 end
 
-                if startTimeSec + durationSec > maxDuration
-                    durationSec = maxDuration - startTimeSec;
+                if st + d > maxDuration
+                    d = maxDuration - st; 
                 end
 
-                onsetBeats = startTimeSec / (60/melodyTempo);
-                durationBeats = durationSec / (60/melodyTempo);
-
-                melodyNmat = [melodyNmat; [onsetBeats, durationBeats, 1, pitch, velocity, startTimeSec, durationSec]];
+                on    = st/(60/melodyTempo);
+                du    = d /(60/melodyTempo);
+                pitch = melodySequence(i,2);
+                vel   = melodySequence(i,4);
+                melodyNmat(end+1,:) = [on, du, 1, pitch, vel, st, d]; 
             end
+
             currentTime = currentTime + melodyTotalDuration;
         end
+
         nmat = [nmat; melodyNmat];
     end
 
+    % Build harmony
     if ~isempty(harmonySequence)
-        % Determine the number of chord notes by checking non-zero values in the first row
-        firstRow = harmonySequence(1, :);
-        noteColumns = find(firstRow(1:end-3) ~= 0, 1, 'last'); % -3 to exclude duration, velocity, startTime
-
-        if isempty(noteColumns)
-            noteColumns = 3; % Default to triad if no non-zero notes found
-        else
-            noteColumns = min(7, noteColumns); % Limit to 7 notes per chord
-        end
-
         harmonyNmat = [];
         currentTime = 0;
+        durCol = size(harmonySequence,2) - 2;
+        velCol = size(harmonySequence,2) - 1;
         while currentTime < maxDuration
-            numChords = size(harmonySequence, 1);
-            chordStartTimes = zeros(numChords, 1);
-            chordStartTimes(1) = currentTime;
-            for i = 2:numChords
-                chordStartTimes(i) = chordStartTimes(i-1) + harmonySequence(i-1, 4);
-            end
-            for i = 1:numChords
-                if chordStartTimes(i) >= maxDuration
-                    continue;
+            starts = [currentTime; currentTime + cumsum(harmonySequence(1:end-1,durCol))];
+            for i = 1:size(harmonySequence,1)
+                st  = starts(i);
+                d   = harmonySequence(i,durCol);
+                if st >= maxDuration
+                    continue; 
                 end
-                chordDurationSec = harmonySequence(i, 4);
-                if chordStartTimes(i) + chordDurationSec > maxDuration
-                    chordDurationSec = maxDuration - chordStartTimes(i);
+                if st + d > maxDuration
+                    d = maxDuration - st; 
                 end
-                chordVelocity = harmonySequence(i, 5);
 
-                % Process each note in the chord
-                for j = 1:noteColumns
-                    pitch = harmonySequence(i, j);
-                    if pitch == 0
-                        continue; % Skip placeholder zeros
-                    end
-                    onsetBeats = chordStartTimes(i) / (60/harmonyTempo);
-                    durationBeats = chordDurationSec / (60/harmonyTempo);
-                    harmonyNmat = [harmonyNmat; [onsetBeats, durationBeats, 2, pitch, chordVelocity, chordStartTimes(i), chordDurationSec]];
+                on    = st/(60/harmonyTempo);
+                du    = d /(60/harmonyTempo);
+                vel   = harmonySequence(i,velCol);
+                notes = harmonySequence(i,1:durCol-1);
+
+                for p = notes(notes>0)
+                    harmonyNmat(end+1,:) = [on, du, 2, p, vel, st, d]; 
+
                 end
             end
+
             currentTime = currentTime + harmonyTotalDuration;
         end
+
         nmat = [nmat; harmonyNmat];
     end
 
-    % Add snare pattern if drum is detected
+    % Car detection using tiny-YOLOv4-COCO
     try
-        load('drumDetector.mat', 'detector');
-        img = imread('lastUploadedImage.png');
-        if size(img, 3) == 1
-            img = repmat(img, [1 1 3]);
+        persistent vehDet
+        if isempty(vehDet)
+            vehDet = yolov4ObjectDetector("tiny-yolov4-coco");
         end
 
-        [bboxes, scores, labels] = detect(detector, img);
+        img = imread('MultiObject2 7.jpg'); % same as Markov script
+        if size(img,3)==1
+            img = repmat(img,1,1,3);
+        end
 
-        disp('YOLOv3 Detection Results:');
-        disp(labels);
-        disp(scores);
+        [bboxes, scores, labels] = detect(vehDet, img, "Threshold",0.5);
+        disp('YOLOv4 Detections:'); disp(table(bboxes, scores, labels));
 
-        % Detect drum
-        drumIdx = strcmpi(cellstr(labels), 'drum') & scores > 0.1;
-        if any(drumIdx)
-            disp('Drum detected! Adding snare pattern...');
-
+        isCar = labels=="car" & scores>0.5;
+        if any(isCar)
+            disp('Car detected! Adding drum pattern.');
+            totalDur = maxDuration;
             drumPattern = [];
-            % Kick and snare melody 
             patternBeats = [0, 0.5, 1.0, 1.25, 1.5];
             patternNotes = [36, 38, 36, 36, 38];
-            patternVelocity = [70, 85, 70, 70, 85];
-            patternDuration = 0.2;
-
-            % Hi-hat melody
-            hihatPatternBeats = [0, 0.5, 1.0, 1.5];
+            patternVel = [70, 85, 70, 70, 85];
+            patDur = 0.2;
+            hihatBeats = [0, 0.5, 1.0, 1.5];
             hihatNote = 42;
-            hihatVelocity = 45;
+            hihatVel = 45;
 
-            % Loop pattern across the track duration (every 2 seconds)
-            for t = 0:2:(maxDuration - patternDuration)
-                % Add Kick and Snare
-                for i = 1:length(patternBeats)
-                    startTime = t + patternBeats(i);
-                    if startTime >= maxDuration
-                        break;
+            % kick-snare
+            for t = 0:2:(totalDur - patDur)
+                for k = 1:numel(patternBeats)
+                    st = t + patternBeats(k);
+                    if st >= totalDur
+                        break; 
                     end
-                    onsetBeats = startTime / (60/melodyTempo);
-                    durationBeats = patternDuration / (60/melodyTempo);
-                    drumPattern = [drumPattern; onsetBeats, durationBeats, 10, patternNotes(i), patternVelocity(i), startTime, patternDuration];
+
+                    on = st/(60/melodyTempo);
+                    du = patDur/(60/melodyTempo);
+                    drumPattern(end+1,:) = [on, du, 10, patternNotes(k), patternVel(k), st, patDur]; 
                 end
-                % Add Hi-Hats
-                for j = 1:length(hihatPatternBeats)
-                    startTime = t + hihatPatternBeats(j);
-                    if startTime >= maxDuration
-                        break;
+
+                % high-hat
+                for k = 1:numel(hihatBeats)
+                    st = t + hihatBeats(k);
+                    if st >= totalDur
+                        break; 
                     end
-                    onsetBeats = startTime / (60/melodyTempo);
-                    durationBeats = patternDuration / (60/melodyTempo);
-                    drumPattern = [drumPattern; onsetBeats, durationBeats, 10, hihatNote, hihatVelocity, startTime, patternDuration];
+
+                    on = st/(60/melodyTempo);
+                    du = patDur/(60/melodyTempo);
+                    drumPattern(end+1,:) = [on, du, 10, hihatNote, hihatVel, st, patDur]; 
                 end
             end
 
             nmat = [nmat; drumPattern];
         else
-            disp('No drum detected — skipping drum pattern.');
+            disp('No car detected; skipping drum pattern.');
         end
+
     catch ME
-        warning(['Drum detection failed: ', ME.message]);
+        warning('Vehicle detection failed: %s', ME.message);
     end
 
+    % Final MIDI output
     if ~isempty(nmat)
-        nmat = sortrows(nmat, 1);
+        nmat = sortrows(nmat,1);
         writemidi(nmat, outputFilename, finalTempo);
-        disp(['Successfully wrote MIDI file: ', outputFilename]);
-        disp(['Total duration: ', num2str(maxDuration), ' seconds']);
-        disp(['Melody original duration: ', num2str(melodyTotalDuration), ' seconds']);
-        disp(['Harmony original duration: ', num2str(harmonyTotalDuration), ' seconds']);
-        disp(['Melody tempo: ', num2str(melodyTempo), ' BPM']);
-        disp(['Harmony tempo: ', num2str(harmonyTempo), ' BPM']);
-        disp(['Final MIDI tempo: ', num2str(finalTempo), ' BPM']);
+        fprintf('Successfully wrote MIDI file: %s\n', outputFilename);
+        fprintf('Total duration: %.2f seconds\n', maxDuration);
     else
         error('No melody or harmony data to write to MIDI');
     end
 end
+
 

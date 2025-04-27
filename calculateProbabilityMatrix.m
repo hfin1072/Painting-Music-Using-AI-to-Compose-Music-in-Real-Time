@@ -1,7 +1,4 @@
 function p = calculateProbabilityMatrix(x)
-% This function calculates the transition probability matrix for MIDI notes.
-% It considers the first state (column 1) and the next state (column 2).
-
 % Ensure input is an integer
 x = round(x);  
 

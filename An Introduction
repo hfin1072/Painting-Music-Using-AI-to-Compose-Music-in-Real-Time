@@ -1,5 +1,5 @@
-A project that translates visual images into audio outputs. Melody is generated with Markov, harmony is generated with 
-SOM and the images is segmented using SAM. YOLO is used for object detection, specifically on cars.
+That project translates visual images into audio outputs. Melody is generated with Markov, harmony is generated with 
+SOM and the images segmented using SAM. YOLO is used for object detection, specifically on cars.
 
 Test file 1 audio representation of image MultiObject2.jpeg
 Test file 2 audio representation MultiObject2 2.jpeg

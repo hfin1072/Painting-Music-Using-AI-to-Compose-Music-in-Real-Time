@@ -132,4 +132,4 @@ elseif ~isempty(generatedHarmonySequence)
 else
     warning('No melody or harmony sequences were generated. Cannot create MIDI file.');
 end
-d,a d but i just wanted the chords named in the 
+
